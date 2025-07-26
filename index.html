@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multiplayer Tic-Tac-Toe</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #eee;
+      text-align: center;
+      padding: 40px;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+ 
+   
+    #board div {
+      width: 100px;
+      height: 100px;
+      font-size: 2.5em;
+      background: #222;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 10px #00fff7;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 1rem;
+      margin: 10px;
+      border-radius: 10px;
+      border: none;
+    }
+    button{
+        cursor: pointer;
+        background: linear-gradient(45deg, #ffe53c, #ff00aa);
+        color: black;
+        font-weight: bold;
+      
+    }
+       #divi {
+      
+        background: linear-gradient(45deg, #ffe53c, #ff00aa);
+      size: 10px;
+        padding: 10px;
+      width: 1000px;
+        margin: 20px auto;      /* Zentriert das Element horizontal */
+   text-align: center;     /* Zentriert den Text im Element */
+    border-radius: 10px;
+       }
+
+
+
+  </style>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+  <h1>Multiplayer Tic-Tac-Toe</h1>
+  <h2 id="status">Wähle ein Spiel...</h2>
+  <button onclick="createRoom()">Raum erstellen</button>
+  <input type="text" id="room-id" placeholder="Raum-ID eingeben" />
+  <button onclick="joinRoom()">Raum Beitreten</button>
+  <div id="board"></div>
+
+  <a href="https://lionel-code1.github.io/Home/"><img src="unnamed.jpg" alt="img"></a>
+  <div id="divi">Klicke auf das Bild um auf meiner Homepage zu gelangen!  </div> 
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAFAS97EaKZXmJ9NjoYT86CfBsJtnHkAKE",
+      authDomain: "ticitaca-142f7.firebaseapp.com",
+      databaseURL: "https://ticitaca-142f7-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "ticitaca-142f7",
+      storageBucket: "ticitaca-142f7.appspot.com",
+      messagingSenderId: "504170400441",
+      appId: "1:504170400441:web:8f1c4234b8394d981a6968",
+      measurementId: "G-GP7LQN37V5"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let room = "";
+    let player = "";
+    let currentTurn = "X";
+    let gameEnded = false; // Flag, ob Spiel zu Ende ist
+
+    function createBoard() {
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement("div");
+        cell.dataset.index = i;
+        cell.onclick = makeMove;
+        boardDiv.appendChild(cell);
+      }
+    }
+
+   function createRoom() {
+  room = Math.random().toString(36).substring(2, 7);
+  player = "X";
+  gameEnded = false;
+  db.ref("games/" + room).set({
+    board: Array(9).fill(""),
+    turn: "X",
+    players: 1
+  });
+  document.getElementById("status").innerText = "Raum erstellt: " + room + " (Warte auf Spieler)";
+  listenToGame();
+  createBoard();
+  document.querySelector('a[href="https://lionel-code1.github.io/Home/"]').style.display = "none";
+  document.getElementById("divi").style.display = "none";
+   }
+
+    function joinRoom() {
+      const id = document.getElementById("room-id").value.trim();
+      if (!id) return alert("Raum-ID eingeben!");
+      room = id;
+      player = "O";
+      gameEnded = false;
+      db.ref("games/" + room + "/players").once("value", snap => {
+        if (snap.exists() && snap.val() === 1) {
+          db.ref("games/" + room + "/players").set(2);
+          document.getElementById("status").innerText = "Beigetreten! Du bist Spieler O.";
+          listenToGame();
+          createBoard();
+        } else {
+          alert("Raum existiert nicht oder ist voll.");
+        }
+      });
+    }
+
+    function listenToGame() {
+      db.ref("games/" + room).on("value", snapshot => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        const cells = document.querySelectorAll("#board div");
+        data.board.forEach((val, i) => {
+          cells[i].textContent = val;
+        });
+
+        currentTurn = data.turn;
+
+        // Status nur ändern wenn Spiel nicht beendet
+        if (!gameEnded) {
+          document.getElementById("status").innerText =
+            currentTurn === player ? "Dein Zug" : "Gegner ist dran";
+        }
+
+        checkWinner(data.board);
+      });
+    }
+
+    function makeMove(e) {
+      if (gameEnded) return; // Kein Zug mehr möglich wenn Spiel zu Ende
+
+      const i = e.target.dataset.index;
+      db.ref("games/" + room).once("value", snap => {
+        const data = snap.val();
+        if (!data || data.board[i] !== "" || data.turn !== player) return;
+
+        data.board[i] = player;
+        data.turn = player === "X" ? "O" : "X";
+
+        db.ref("games/" + room).update(data);
+      });
+    }
+
+    function checkWinner(b) {
+      const win = [
+        [0,1,2],[3,4,5],[6,7,8],
+        [0,3,6],[1,4,7],[2,5,8],
+        [0,4,8],[2,4,6]
+      ];
+      for (let [a,b1,c] of win) {
+        if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
+          gameEnded = true;
+          document.getElementById("status").innerText = b[a] + " gewinnt!";
+          setTimeout(() => {
+            resetGame();
+          }, 3000);
+          return;
+        }
+      }
+      if (b.every(cell => cell !== "")) {
+        gameEnded = true;
+        document.getElementById("status").innerText = "Unentschieden!";
+        setTimeout(() => {
+          resetGame();
+        }, 3000);
+      }
+    }
+
+    function resetGame() {
+      if (!room) return;
+
+      // Spiel zurücksetzen in der DB
+      db.ref("games/" + room).update({
+        board: Array(9).fill(""),
+        turn: "X"
+      });
+
+      gameEnded = false;
+      document.getElementById("status").innerText = "Neues Spiel gestartet! " + (currentTurn === player ? "Dein Zug" : "Gegner ist dran");
+    }
+  </script>
+</body>
+</html>
